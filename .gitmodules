@@ -4,3 +4,9 @@
 [submodule "thirdparty/pytorch-DRL"]
 	path = thirdparty/pytorch-DRL
 	url = https://github.com/ChenglongChen/pytorch-DRL
+[submodule "thirdparty/baselines"]
+	path = thirdparty/baselines
+	url = https://github.com/openai/baselines.git
+[submodule "thirdparty/Deep-Reinforcement-Learning-Algorithms-with-PyTorch"]
+	path = thirdparty/Deep-Reinforcement-Learning-Algorithms-with-PyTorch
+	url = https://github.com/p-christ/Deep-Reinforcement-Learning-Algorithms-with-PyTorch

@@ -61,8 +61,6 @@ class Vehicle:
         V_front1[0, :] += self.V_b1['V_front']
         V_front1 = rotM1 @ V_front1 + vehState[0:2] * self.V_a1['V_front']
 
-
-
         vehicle_patches = [
             patches.Polygon(V_rear1.numpy().T, True, color='black'),
             patches.Polygon(V_front1.numpy().T, True, color='black'),
@@ -70,6 +68,23 @@ class Vehicle:
             patches.Polygon(self.vehCorners.numpy().T, color="blue", fill=False, linewidth=3),
             patches.Circle(self.pos, 0.2, color="blue", fill=True)
         ]
+
+        for patch in vehicle_patches:
+            ax.add_patch(patch)
+
+    def DrawTrain(self, ax):
+        """Draw the simulator in train mode
+        """
+
+        vehicle_patches = [
+            patches.Polygon(self.vehCorners.numpy().T, color="blue", fill=True, linewidth=3),
+            patches.Circle(self.pos, 0.2, color="red", fill=True)
+        ]
+        if self.radarNum is not None:
+            radar_patches = [
+                patches.Polygon(self.radarSegs[idx, :, :].numpy().T, color="green", fill=False, linewidth=0.5) for idx in range(self.radarNum)
+            ]
+            vehicle_patches += radar_patches
 
         for patch in vehicle_patches:
             ax.add_patch(patch)
@@ -108,6 +123,70 @@ class Vehicle:
                                             [torch.sin(vehState[2]), torch.cos(vehState[2])]])
         vehCorners: torch.Tensor = rotM1 @ self.vehCornersOriginal + vehState[0:2].repeat(1, 4)
         return vehCorners
+
+    @property
+    def radarSegs(self):
+        vehState: torch.Tensor = self.vehState
+        rotM1: torch.Tensor = torch.tensor([[torch.cos(vehState[2]), -torch.sin(vehState[2])],
+                                            [torch.sin(vehState[2]), torch.cos(vehState[2])]])
+        radarSegs: torch.Tensor = rotM1 @ self.radarSegsOriginal + vehState[0:2].unsqueeze(0).repeat(self.radarNum, 1, 2)
+        return radarSegs
+
+    @classmethod
+    def GetRadarDistanceOneshot(cls, radar, seg):
+        segV = seg[:, 0:1] - radar[:, 0:1]
+        segM = torch.cat([radar[:, 1:2] - radar[:, 0:1], seg[:, 0:1] - seg[:, 1:2]], dim=1)
+        if torch.abs(torch.linalg.det(segM)) < 1e-9:
+            return torch.tensor([[1.]])
+        nmd = torch.linalg.inv(segM) @ segV
+
+        if 0 <= nmd[1:2, :] <= 1:
+            return nmd[0:1, :]
+        else:
+            return torch.tensor([[1.]])
+
+    @classmethod
+    def GetRadarDistanceBatch(cls, radar, segAll):
+        """
+        radar [2,2]
+        segAll [B, 2, 2]
+        """
+        batch_sz = segAll.shape[0]
+        radar = radar.unsqueeze(0).repeat(batch_sz, 1, 1)
+        segV = segAll[:, :, 0:1] - radar[:, :, 0:1]
+        segM = torch.cat([radar[:, :, 1:2] - radar[:, :, 0:1], segAll[:, :, 0:1] - segAll[:, :, 1:2]], dim=2)
+
+        indices = torch.where(torch.abs(torch.linalg.det(segM)) > 1e-9)[0]
+        segM = torch.index_select(segM, 0, indices)
+        segV = torch.index_select(segV, 0, indices)
+        if segM.shape[0] <= 0:
+            return 1.
+
+        nmd = torch.linalg.inv(segM) @ segV
+        indices = torch.where(nmd > 0)
+        nmd = torch.index_select(nmd, 0, torch.where(0 <= nmd[:, 1])[0])
+        if nmd.shape[0] <= 0:
+            return 1.
+
+        nmd = torch.index_select(nmd, 0, torch.where(nmd[:, 1] <= 1)[0])
+        if nmd.shape[0] <= 0:
+            return 1.
+
+        _nmd = nmd[:, 0]
+        distances = (1 >= _nmd) * (0 <= _nmd) * _nmd
+
+        distances = torch.index_select(distances, 0, torch.where(distances > 0)[0])
+        if distances.shape[0] <= 0:
+            return 1.
+        else:
+            return float(torch.min(distances))
+
+    def GetAllRadarDistance(self, segAll):
+        distances = torch.zeros(size=(self.radarNum, 1))
+        radar_segs = self.radarSegs
+        for radar_idx in range(self.radarNum):
+            distances[radar_idx] = self.GetRadarDistanceBatch(radar_segs[radar_idx, :, :], segAll)
+        return distances
 
     @property
     def velTensor(self):

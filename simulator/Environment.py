@@ -65,13 +65,33 @@ class Environment(gym.Env):
         steerAngCandidates = torch.linspace(self.vehicle.minSteerAng, self.vehicle.maxSteerAng, quantLevels)
         self.actionCandidates = torch.stack([speedCandidates, steerAngCandidates])
 
-    def Visualization(self, ax):
+    @classmethod
+    def InitFrame(cls):
+        fig = plt.figure(figsize=(4, 4.75), dpi=100)
+        ax = fig.add_subplot(111)
+        return fig, ax
+
+    @classmethod
+    def GetFrame(cls, fig) -> np.ndarray:
+        with io.BytesIO() as buff:
+            fig.savefig(buff, format='raw')
+            buff.seek(0)
+            data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
+        w, h = fig.canvas.get_width_height()
+        im = data.reshape((int(h), int(w), -1))
+        return im
+
+    def Visualization(self, ax, mode='eval'):
         """Draw the simulator
         """
         ax.cla()
         self.park.Draw(ax)
-        self.vehicle.Draw(ax)
-        plt.axis("equal")
+        if mode == 'eval':
+            self.vehicle.Draw(ax)
+        elif mode == 'train':
+            self.vehicle.DrawTrain(ax)
+        ax.set_xlim(self.park.park_x[0] - 0.5, self.park.park_x[2] + 0.5)
+        ax.set_ylim(self.park.park_y[0], self.park.park_y[3])
 
     @classmethod
     def IsTwoSegCrossed(cls, segA, segB):
@@ -85,6 +105,7 @@ class Environment(gym.Env):
         else:
             return False
 
+
     @classmethod
     def IsSegPolygonCrossed(cls, seg, plg):
         plg_aug: torch.Tensor = torch.cat([plg, plg[:, 0:1]], dim=1)
@@ -93,12 +114,13 @@ class Environment(gym.Env):
                 return True
         return False
 
+
     @property
     def IsCollision(self):
         vehCorners: torch.Tensor = self.vehicle.vehCorners
 
-        for idx in range(0, self.park.segAll.shape[1], 2):
-            if self.IsSegPolygonCrossed(self.park.segAll[:, idx:idx + 2], vehCorners):
+        for idx in range(0, self.park.segAll.shape[0]):
+            if self.IsSegPolygonCrossed(self.park.segAll[idx, :, :], vehCorners):
                 return True
 
         return False
@@ -133,12 +155,12 @@ class Environment(gym.Env):
         # TODO: Finish this part
         return self.vehicle.vehState
 
-    def render(self, fig, ax, *args, **kwargs):
+    def render(self, fig, ax, mode='eval', *args, **kwargs):
         """
         fig: matplotlib fig
         ax: matplotlib axe
         """
-        self.Visualization(ax)
+        self.Visualization(ax, mode)
         im = getFrame(fig)
         cv2.imshow('demo_control', cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
 

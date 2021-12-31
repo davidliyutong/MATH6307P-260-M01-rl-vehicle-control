@@ -11,9 +11,21 @@ class Park(gym.Env):
     def __init__(self) -> None:
         park_x = self.park_x
         park_y = self.park_y
-        self.segAll = torch.tensor([[park_x[0], park_x[1], park_x[1], park_x[1], park_x[0], park_x[0], park_x[0], park_x[1], park_x[1], park_x[1], park_x[2], park_x[2]],
-                                    [park_y[1], park_y[1], park_y[1], park_y[0], park_y[1], park_y[2], park_y[2], park_y[2], park_y[2], park_y[3], park_y[3], park_y[0]]])
-
+        self.segAll_ = torch.tensor([[park_x[0], park_x[1], park_x[1], park_x[1], park_x[0], park_x[0], park_x[0], park_x[1], park_x[1], park_x[1], park_x[2], park_x[2]],
+                                     [park_y[1], park_y[1], park_y[1], park_y[0], park_y[1], park_y[2], park_y[2], park_y[2], park_y[2], park_y[3], park_y[3], park_y[0]]])
+        self.segAll = torch.tensor([[[park_x[0], park_x[1]],
+                                     [park_y[1], park_y[1]]],
+                                    [[park_x[1], park_x[1]],
+                                     [park_y[1], park_y[0]]],
+                                    [[park_x[0], park_x[0]],
+                                     [park_y[1], park_y[2]]],
+                                    [[park_x[0], park_x[1]],
+                                     [park_y[2], park_y[2]]],
+                                    [[park_x[1], park_x[1]],
+                                     [park_y[2], park_y[3]]],
+                                    [[park_x[2], park_x[2]],
+                                     [park_y[3], park_y[0]]],
+                                    ])
         self.park_patches = [patches.Polygon(np.array([[park_x[0], park_x[1], park_x[1], park_x[0]], [park_y[0], park_y[0], park_y[1], park_y[1]]]).T, True, color='black'),
                              patches.Polygon(np.array([[park_x[0], park_x[1], park_x[1], park_x[0]], [park_y[2], park_y[2], park_y[3], park_y[3]]]).T, True, color='black'),
                              patches.Polygon(np.array([[park_x[2], park_x[2] + 0.5, park_x[2] + 0.5, park_x[2]], [park_y[0], park_y[0], park_y[3], park_y[3]]]).T, True, color='black'),
@@ -24,5 +36,3 @@ class Park(gym.Env):
         """
         for patch in self.park_patches:
             ax.add_patch(patch)
-        ax.set_xlim(self.park_x[0] - 0.5, self.park_x[2] + 0.5)
-        ax.set_ylim(self.park_y[0], self.park_y[3])

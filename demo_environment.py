@@ -6,12 +6,13 @@ if __name__ == '__main__':
     environment = Environment(Vehicle(0, 0, 0, 0, 0), Park())
     environment.seed(0)
     environment.reset()
-    fig, ax = initFrame(figsize=(4, 4))
+    fig, ax = environment.InitFrame()
 
     while True:
-        environment.render(fig, ax)
+        environment.render(fig, ax, mode='train')
         dummy_action = torch.randn(32)
         environment.step(dummy_action)
+        distances = environment.vehicle.GetAllRadarDistance(environment.park.segAll)
+        print("distance: ", distances.squeeze())
         if environment.is_done:
             environment.reset()
-

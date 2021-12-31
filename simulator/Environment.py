@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import math
 import io
 import cv2
+import os
+import random
 
 from simulator.Park import Park
 from simulator.Vehicle import Vehicle
@@ -32,7 +34,7 @@ def resetEnv() -> tuple:
     """
     X_CANDIDATES = np.linspace(0, 3, 601)
     Y_CANDIDATES = np.linspace(-1, 4, 601)
-    THETA_CANDIDATES = np.linspace(0, 2 * math.pi, 64)
+    THETA_CANDIDATES = np.linspace(math.radians(-30), math.radians(120), 64)
 
     environment = Environment(Vehicle(0, 0, 0, 0, 0), Park())
 
@@ -49,7 +51,7 @@ def resetEnv() -> tuple:
 
 class Environment(gym.Env):
 
-    def __init__(self, vehicle: Vehicle, park: Park, dt=0.02, vehL=4, steerVel=math.pi / 2, speedAcc=10, steerT=0.2) -> None:
+    def __init__(self, vehicle: Vehicle, park: Park, dt=0.02, vehL=4, steerVel=math.pi / 2, speedAcc=10, steerT=0.2, quantLevels=32) -> None:
         self.vehicle = vehicle
         self.park = park
         self.dt = dt
@@ -57,6 +59,11 @@ class Environment(gym.Env):
         self.steerVel = steerVel
         self.speedAcc = speedAcc
         self.steerT = steerT
+
+        self.quantLevels = quantLevels  # number of quantization levels, better be even number
+        speedCandidates = torch.linspace(self.vehicle.minVel, self.vehicle.maxVel, quantLevels)
+        steerAngCandidates = torch.linspace(self.vehicle.minSteerAng, self.vehicle.maxSteerAng, quantLevels)
+        self.actionCandidates = torch.stack([speedCandidates, steerAngCandidates])
 
     def Visualization(self, ax):
         """Draw the simulator
@@ -101,8 +108,25 @@ class Environment(gym.Env):
         return 0
 
     @property
+    def IsAccomplished(self):
+        TARGET = torch.tensor([[-3.9], [0]])
+        MARGIN = 2e-1
+        if torch.sum(self.vehicle.posTensor - TARGET) < MARGIN:
+            return True
+        else:
+            return False
+
+    @property
+    def IsOutOfBoundary(self):
+        pos = self.vehicle.pos
+        if pos[0] < -5 or pos[0] > 4 or pos[1] < -3 or pos[1] > 7:  # TODO: Magic Number
+            return True
+        else:
+            return False
+
+    @property
     def is_done(self):
-        return False
+        return self.IsCollision or self.IsAccomplished or self.IsOutOfBoundary
 
     @property
     def observation(self):
@@ -110,6 +134,10 @@ class Environment(gym.Env):
         return self.vehicle.vehState
 
     def render(self, fig, ax, *args, **kwargs):
+        """
+        fig: matplotlib fig
+        ax: matplotlib axe
+        """
         self.Visualization(ax)
         im = getFrame(fig)
         cv2.imshow('demo_control', cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
@@ -117,21 +145,18 @@ class Environment(gym.Env):
         if cv2.waitKey(1) & 0xFF == ord('q'):
             return
 
-    def step(self, action):
+    def step(self, action: torch.Tensor):
         """
         Action is 2D [steerAngIn, speedIn]
         """
         # Decompose action
         # [00 - 16] ==> steerAngIn
         # [16 - 32] ==> speedIn
-
-        steerAngIn, speedIn = action
-        vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
-        observation = 0
-        reward = 0
-        done = False
-        info = {}
-        return observation, self.reward, self.is_done, info
+        indices = action.reshape(2, -1).max(dim=1)[1]
+        steerAngIn, speedIn = self.actionCandidates[0, indices[0]], self.actionCandidates[1, indices[1]]
+        self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
+        info = {'steerAngIn': steerAngIn, 'speedIn': speedIn}
+        return self.observation, self.reward, self.is_done, info
 
     def reset(self):
         init_x, init_y, init_theta = resetEnv()
@@ -139,6 +164,14 @@ class Environment(gym.Env):
         return self.observation
 
     def seed(self, seed=None):
+        seed = 0 if seed is None else seed
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+
         return None
 
     def close(self):
@@ -146,21 +179,8 @@ class Environment(gym.Env):
 
     @property
     def observation_space(self):
-        return
+        return 32
 
     @property
-    def action_space_space(self):
-        return
-
-
-if __name__ == '__main__':
-    init_x = 1.2
-    init_y = 1.5
-    init_theta = math.pi / 2
-    vehicle = Vehicle(init_x, init_y, init_theta, 0, 0)
-    park = Park()
-    environment = Environment(vehicle, park)
-    print(environment.IsCollision)
-    environment.vehicle.VehDynamics(0, -1, 0.02, 4, 1.5708, 10, 0.2)
-    environment.Visualization()
-    print('end')
+    def action_space(self):
+        return 2 * self.quantLevels

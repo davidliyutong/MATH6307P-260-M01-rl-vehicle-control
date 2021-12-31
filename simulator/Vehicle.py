@@ -11,6 +11,10 @@ class Vehicle:
     front_y = torch.tensor([0.75, 0.75, 1, 1, 0.75, 0.75, -0.75, -0.75, -1, -1, -0.75, -0.75]).reshape(-1, 1)
     rear_x = torch.tensor([-1.125, -0.875, -0.875, -1.5, -1.5, -1.25, -1.25, -1.5, -1.5, -0.875, -0.875, -1.125]).reshape(-1, 1)
     rear_y = torch.tensor([0.75, 0.75, 1, 1, 0.75, 0.75, -0.75, -0.75, -1, -1, -0.75, -0.75]).reshape(-1, 1)  # TODO This shape is releated with <TAG=0>
+    minSteerAng = -math.pi / 4
+    maxSteerAng = math.pi / 4
+    minVel = -1
+    maxVel = 1
 
     def __init__(self, init_x, init_y, init_theta, steerAng, speed) -> None:
         self.vehState = torch.tensor([[float(init_x)], [float(init_y)], [float(init_theta)], [float(steerAng)], [float(speed)]], dtype=torch.float32)
@@ -57,11 +61,14 @@ class Vehicle:
         V_front1[0, :] += self.V_b1['V_front']
         V_front1 = rotM1 @ V_front1 + vehState[0:2] * self.V_a1['V_front']
 
+
+
         vehicle_patches = [
             patches.Polygon(V_rear1.numpy().T, True, color='black'),
             patches.Polygon(V_front1.numpy().T, True, color='black'),
             patches.Polygon(V_body1.numpy().T, True, color='red'),
-            patches.Polygon(self.vehCorners.numpy().T, color="blue", fill=False, linewidth=3)
+            patches.Polygon(self.vehCorners.numpy().T, color="blue", fill=False, linewidth=3),
+            patches.Circle(self.pos, 0.2, color="blue", fill=True)
         ]
 
         for patch in vehicle_patches:
@@ -69,7 +76,7 @@ class Vehicle:
 
     def VehDynamics(self, steerAngIn, speedIn, dt, vehL, steerVel, speedAcc, steerT):
         expT = math.exp(-dt / steerT)  # TODO: Store this constant
-        steerAngIdeal = torch.clip((1 - expT) * steerAngIn + expT * self.vehState[3], -math.pi / 4, math.pi / 4)
+        steerAngIdeal = torch.clip((1 - expT) * steerAngIn + expT * self.vehState[3], self.minSteerAng, self.maxSteerAng)
         vehState = self.vehState
 
         # vehicle steering angle evolution
@@ -101,3 +108,35 @@ class Vehicle:
                                             [torch.sin(vehState[2]), torch.cos(vehState[2])]])
         vehCorners: torch.Tensor = rotM1 @ self.vehCornersOriginal + vehState[0:2].repeat(1, 4)
         return vehCorners
+
+    @property
+    def velTensor(self):
+        return self.vehState[4:5, :]
+
+    @property
+    def steerAngTensor(self):
+        return self.vehState[3:4, :]
+
+    @property
+    def angTensor(self):
+        return self.vehState[2:3, :]
+
+    @property
+    def posTensor(self):
+        return self.vehState[0:2, :]
+
+    @property
+    def vel(self):
+        return float(self.vehState[4, 0])
+
+    @property
+    def steerAng(self):
+        return float(self.vehState[3, 0])
+
+    @property
+    def ang(self):
+        return float(self.vehState[2, 0])
+
+    @property
+    def pos(self):
+        return float(self.vehState[0, 0]), float(self.vehState[1, 0])

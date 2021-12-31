@@ -1,3 +1,6 @@
 [submodule "thirdparty/machin"]
 	path = thirdparty/machin
 	url = https://github.com/iffiX/machin
+[submodule "thirdparty/pytorch-DRL"]
+	path = thirdparty/pytorch-DRL
+	url = https://github.com/ChenglongChen/pytorch-DRL

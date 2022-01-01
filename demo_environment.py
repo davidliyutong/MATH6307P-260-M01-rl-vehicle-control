@@ -9,10 +9,12 @@ if __name__ == '__main__':
     fig, ax = environment.InitFrame()
 
     while True:
-        environment.render(fig, ax, mode='train')
+        # environment.render(fig, ax, mode='train')
+        dummy_observation = environment.observation
         dummy_action = torch.randn(32)
-        environment.step(dummy_action)
+        obs, rwd, is_done, info = environment.step(dummy_action)
         distances = environment.vehicle.GetAllRadarDistance(environment.park.segAll)
         print("distance: ", distances.squeeze())
         if environment.is_done:
             environment.reset()
+            environment.render(fig, ax, mode='train')

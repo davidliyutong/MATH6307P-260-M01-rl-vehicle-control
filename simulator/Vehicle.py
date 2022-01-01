@@ -16,7 +16,7 @@ class Vehicle:
     minVel = -1
     maxVel = 1
 
-    def __init__(self, init_x, init_y, init_theta, steerAng, speed) -> None:
+    def __init__(self, init_x, init_y, init_theta, steerAng, speed, numRadar=24, radarRange=4) -> None:
         self.vehState = torch.tensor([[float(init_x)], [float(init_y)], [float(init_theta)], [float(steerAng)], [float(speed)]], dtype=torch.float32)
 
         # Runtime constants
@@ -42,6 +42,17 @@ class Vehicle:
         self.V_body = torch.cat([self.v_body_x, self.v_body_y], dim=1).T  # TODO This shape is releated with <TAG=0>
         self.V_front = torch.cat([self.v_front_x - self.V_b1['V_front'], self.v_front_y], dim=1).T  # TODO This shape is releated with <TAG=0>
         self.V_rear = torch.cat([self.v_rear_x, self.v_rear_y], dim=1).T  # TODO This shape is releated with <TAG=0>
+
+
+        self.radar_x = self.vehCornersOriginal[0, 0] / 2
+        self.radar_y = 0
+        radar_translation = torch.tensor([[[self.radar_x], [self.radar_y]]]).repeat(numRadar, 1, 1)
+        self.radarRange = radarRange
+        self.radarNum = numRadar
+        angle_candidates = torch.linspace(0, 2 * math.pi, numRadar + 1)[:numRadar]
+        radar_endpoints = torch.stack([torch.cos(angle_candidates), torch.sin(angle_candidates)]).T.unsqueeze(-1) * radarRange
+        self.radarSegsOriginal = torch.stack([torch.zeros_like(radar_endpoints), radar_endpoints], dim=2).squeeze(-1) + radar_translation
+
 
     def Draw(self, ax):
         """Draw the simulator

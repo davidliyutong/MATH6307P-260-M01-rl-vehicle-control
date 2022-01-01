@@ -50,6 +50,9 @@ def resetEnv() -> tuple:
 
 
 class Environment(gym.Env):
+    TARGET_POS = torch.tensor([[-3.9], [0]])
+    TARGET_ANG = torch.tensor([[0]])
+    MARGIN = 2e-1
 
     def __init__(self, vehicle: Vehicle, park: Park, dt=0.02, vehL=4, steerVel=math.pi / 2, speedAcc=10, steerT=0.2, quantLevels=32) -> None:
         self.vehicle = vehicle
@@ -105,7 +108,6 @@ class Environment(gym.Env):
         else:
             return False
 
-
     @classmethod
     def IsSegPolygonCrossed(cls, seg, plg):
         plg_aug: torch.Tensor = torch.cat([plg, plg[:, 0:1]], dim=1)
@@ -113,7 +115,6 @@ class Environment(gym.Env):
             if cls.IsTwoSegCrossed(seg, plg_aug[:, idx:idx + 2]):
                 return True
         return False
-
 
     @property
     def IsCollision(self):
@@ -127,13 +128,23 @@ class Environment(gym.Env):
 
     @property
     def reward(self):
-        return 0
+        pos_err: torch.Tensor = self.TARGET_POS - self.vehicle.vehState[0:2, :]
+        ang_err = self.TARGET_ANG - self.vehicle.vehState[2:3, :]
+        steerAng = self.vehicle.vehState[3:4]
+        vehVel = self.vehicle.vehState[4:5]
+        is_parked = 1 if self.IsParked else 0
+        is_collision = 1 if self.IsCollision else 0
+        rwd = 2 * torch.exp(-(0.05 * torch.sum(pos_err ** 2))) \
+              + 0.5 * torch.exp(-400 * ang_err ** 2) \
+              - 0.05 * steerAng ** 2 \
+              - 0.05 * vehVel ** 2 \
+              - is_parked * 100 \
+              + is_collision * -50
+        return rwd
 
     @property
-    def IsAccomplished(self):
-        TARGET = torch.tensor([[-3.9], [0]])
-        MARGIN = 2e-1
-        if torch.sum(self.vehicle.posTensor - TARGET) < MARGIN:
+    def IsParked(self):
+        if torch.sum(self.vehicle.posTensor - self.TARGET_POS) < self.MARGIN:
             return True
         else:
             return False
@@ -148,12 +159,17 @@ class Environment(gym.Env):
 
     @property
     def is_done(self):
-        return self.IsCollision or self.IsAccomplished or self.IsOutOfBoundary
+        return self.IsCollision or self.IsParked or self.IsOutOfBoundary,
 
     @property
     def observation(self):
-        # TODO: Finish this part
-        return self.vehicle.vehState
+        target_state = self.TARGET_POS
+        vehicle_state = self.vehicle.vehState
+        pos_err = self.TARGET_POS - self.vehicle.vehState[0:2, :]
+        ang_err = self.TARGET_ANG - self.vehicle.vehState[2:3, :]
+        radar_readings = self.vehicle.GetAllRadarDistance(self.park.segAll)
+        obs = torch.cat([target_state, vehicle_state, pos_err, ang_err, radar_readings])
+        return obs
 
     def render(self, fig, ax, mode='eval', *args, **kwargs):
         """
@@ -178,7 +194,34 @@ class Environment(gym.Env):
         steerAngIn, speedIn = self.actionCandidates[0, indices[0]], self.actionCandidates[1, indices[1]]
         self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
         info = {'steerAngIn': steerAngIn, 'speedIn': speedIn}
-        return self.observation, self.reward, self.is_done, info
+
+        # Observation
+        target_state = self.TARGET_POS
+        vehicle_state = self.vehicle.vehState
+        pos_err = self.TARGET_POS - self.vehicle.vehState[0:2, :]
+        ang_err = self.TARGET_ANG - self.vehicle.vehState[2:3, :]
+        radar_readings = self.vehicle.GetAllRadarDistance(self.park.segAll)
+        obs = torch.cat([target_state, vehicle_state, pos_err, ang_err, radar_readings])
+
+        # IsDone
+        is_collision = self.IsCollision
+        is_parked = self.IsParked
+        is_out_of_boundary = self.IsOutOfBoundary,
+        is_done = is_collision or is_parked or is_out_of_boundary
+
+        # Reward
+        steerAng = self.vehicle.vehState[3:4]
+        vehVel = self.vehicle.vehState[4:5]
+        rwd = 2 * torch.exp(-(0.05 * torch.sum(pos_err ** 2))) \
+              + 0.5 * torch.exp(-400 * ang_err ** 2) \
+              - 0.05 * steerAng ** 2 \
+              - 0.05 * vehVel ** 2 \
+              - is_parked * 100 \
+              + is_collision * -50
+
+        # return self.observation, self.reward, self.is_done, info
+        return obs, rwd, is_done, info
+
 
     def reset(self):
         init_x, init_y, init_theta = resetEnv()

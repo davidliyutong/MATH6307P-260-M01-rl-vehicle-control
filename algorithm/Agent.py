@@ -1,9 +1,10 @@
+import torch
 import torch as th
 
 import numpy as np
 
-from common.Memory import ReplayMemory
-from common.utils import identity
+from .Memory import ReplayMemory
+from .utils import identity
 
 
 class Agent(object):
@@ -24,7 +25,6 @@ class Agent(object):
     def __init__(self, env, state_dim, action_dim,
                  memory_capacity=10000, max_steps=10000,
                  reward_gamma=0.99, reward_scale=1., done_penalty=None,
-                 actor_hidden_size=32, critic_hidden_size=32,
                  actor_output_act=identity, critic_loss="mse",
                  actor_lr=0.01, critic_lr=0.01,
                  optimizer_type="rmsprop", entropy_reg=0.01,
@@ -46,8 +46,6 @@ class Agent(object):
         self.done_penalty = done_penalty
 
         self.memory = ReplayMemory(memory_capacity)
-        self.actor_hidden_size = actor_hidden_size
-        self.critic_hidden_size = critic_hidden_size
         self.actor_output_act = actor_output_act
         self.critic_loss = critic_loss
         self.actor_lr = actor_lr
@@ -81,7 +79,7 @@ class Agent(object):
         if done:
             if self.done_penalty is not None:
                 reward = self.done_penalty
-            next_state = [0] * len(state)
+            next_state = torch.zeros_like(next_state)
             self.env_state = self.env.reset()
             self.n_episodes += 1
             self.episode_done = True

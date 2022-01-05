@@ -1,6 +1,8 @@
 import torch.nn as nn
+import torch
 from torch.optim import Adam, RMSprop
-import torch.F as F
+import torch.nn.functional as F
+from torch.autograd import Variable
 import numpy as np
 from copy import deepcopy
 
@@ -16,11 +18,10 @@ class DDPG(Agent):
     - Critic uses gradient temporal-difference learning
     """
 
-    def __init__(self, env, acctor_network, critic_etwork, state_dim, action_dim,
+    def __init__(self, env, actor_network, critic_network, state_dim, action_dim,
                  memory_capacity=10000, max_steps=None,
                  target_tau=0.01, target_update_steps=5,
                  reward_gamma=0.99, reward_scale=1., done_penalty=None,
-                 actor_hidden_size=32, critic_hidden_size=32,
                  actor_output_act=F.tanh, critic_loss="mse",
                  actor_lr=0.001, critic_lr=0.001,
                  optimizer_type="adam", entropy_reg=0.01,
@@ -30,7 +31,6 @@ class DDPG(Agent):
         super(DDPG, self).__init__(env, state_dim, action_dim,
                                    memory_capacity, max_steps,
                                    reward_gamma, reward_scale, done_penalty,
-                                   actor_hidden_size, critic_hidden_size,
                                    actor_output_act, critic_loss,
                                    actor_lr, critic_lr,
                                    optimizer_type, entropy_reg,
@@ -43,8 +43,8 @@ class DDPG(Agent):
 
         # ActorNetwork: nn.Module
         # CriticNetwork: nn.Module
-        self.actor = acctor_network
-        self.critic = critic_etwork
+        self.actor = actor_network
+        self.critic = critic_network
         # to ensure target network and learning network has the same weights
         self.actor_target = deepcopy(self.actor)
         self.critic_target = deepcopy(self.critic)
@@ -73,10 +73,10 @@ class DDPG(Agent):
             pass
 
         batch = self.memory.sample(self.batch_size)
-        state_var = to_tensor_var(batch.states, self.use_cuda).view(-1, self.state_dim)
-        action_var = to_tensor_var(batch.actions, self.use_cuda).view(-1, self.action_dim)
-        reward_var = to_tensor_var(batch.rewards, self.use_cuda).view(-1, 1)
-        next_state_var = to_tensor_var(batch.next_states, self.use_cuda).view(-1, self.state_dim)
+        state_var = Variable(torch.cat(batch.states, dim=0))
+        action_var = Variable(torch.cat(batch.actions, dim=0))
+        reward_var = Variable(torch.cat(batch.rewards, dim=0))
+        next_state_var = Variable(torch.cat(batch.next_states, dim=0))
         done_var = to_tensor_var(batch.dones, self.use_cuda).view(-1, 1)
 
         # estimate the target q with actor_target network and critic_target network
@@ -121,18 +121,14 @@ class DDPG(Agent):
         epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
                   np.exp(-1. * self.n_steps / self.epsilon_decay)
         # add noise
-        noise = np.random.randn(self.action_dim) * epsilon
+        noise = torch.randn(self.action_dim, device=action.device) * epsilon
         action += noise
         return action
 
     # choose an action based on state for execution
     def action(self, state):
-        action_var = self.actor(to_tensor_var([state], self.use_cuda))
-        if self.use_cuda:
-            action = action_var.data.cpu().numpy()[0]
-        else:
-            action = action_var.data.numpy()[0]
-        return action
+        action_var = self.actor(state)
+        return action_var
 
 
 if __name__ == '__main__':

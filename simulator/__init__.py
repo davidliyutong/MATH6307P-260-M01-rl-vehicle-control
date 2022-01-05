@@ -1,3 +1,3 @@
 from .Park import Park
 from .Vehicle import Vehicle
-from .Environment import Environment, resetEnv, initFrame, getFrame
+from .Environment import Environment, resetEnv, initFrame, getFrame, resetEnvEval, resetEnvVel, resetEnvParked

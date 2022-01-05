@@ -19,6 +19,7 @@ def getFrame(fig) -> np.ndarray:
         data = np.frombuffer(buff.getvalue(), dtype=np.uint8)
     w, h = fig.canvas.get_width_height()
     im = data.reshape((int(h), int(w), -1))
+    im = cv2.cvtColor(im, cv2.COLOR_RGBA2RGB)
     return im
 
 
@@ -30,7 +31,7 @@ def initFrame(figsize=(4, 4)):
 
 def resetEnv() -> tuple:
     """
-    Return: init_x, init_y, inti_theta
+    Return: init_x, init_y, inti_theta, init_steer_ang, init_speed
     """
     X_CANDIDATES = np.linspace(0, 3, 601)
     Y_CANDIDATES = np.linspace(-1, 4, 601)
@@ -46,15 +47,66 @@ def resetEnv() -> tuple:
             if environment.IsCollision:
                 pass
             else:
-                return init_x, init_y, init_theta
+                return init_x, init_y, init_theta, 0, 0
 
+def resetEnvVel() -> tuple:
+    """
+    Return: init_x, init_y, inti_theta, init_steer_ang, init_speed
+    """
+    X_CANDIDATES = np.linspace(0.5, 2.5, 301)
+    Y_CANDIDATES = np.linspace(1, 4, 301)
+    THETA_CANDIDATES = np.linspace(math.radians(-30), math.radians(120), 64)
+
+    environment = Environment(Vehicle(0, 0, 0, 0, 0), Park())
+
+    while True:
+        init_x = np.random.choice(X_CANDIDATES)
+        init_y = np.random.choice(Y_CANDIDATES)
+        for init_theta in np.random.permutation(THETA_CANDIDATES):
+            environment.vehicle.vehState = torch.tensor([[init_x], [init_y], [init_theta], [0], [0]], dtype=torch.float32)
+            if environment.IsCollision:
+                pass
+            else:
+                return init_x, init_y, init_theta, 0, float(np.random.randn(1))
+
+
+def resetEnvEval() -> tuple:
+    """
+    Return: init_x, init_y, inti_theta, init_steer_ang, init_speed
+    """
+    init_x = 1.2
+    init_y = 1.5
+    init_theta = math.pi / 2
+
+    return init_x, init_y, init_theta, 0, 0
+
+def resetEnvParked() -> tuple:
+    """
+    Return: init_x, init_y, inti_theta, init_steer_ang, init_speed
+    """
+    init_x = -3.9
+    init_y = -0.4
+    init_theta = 0
+
+    return init_x, init_y, init_theta, 0, 0
 
 class Environment(gym.Env):
     TARGET_POS = torch.tensor([[-3.9], [0]])
     TARGET_ANG = torch.tensor([[0]])
-    MARGIN = 2e-1
+    MARGIN = 1
 
-    def __init__(self, vehicle: Vehicle, park: Park, dt=0.02, vehL=4, steerVel=math.pi / 2, speedAcc=10, steerT=0.2, quantLevels=32) -> None:
+    def __init__(self,
+                 vehicle: Vehicle,
+                 park: Park,
+                 dt=0.02,
+                 vehL=4,
+                 steerVel=math.pi / 2,
+                 speedAcc=10,
+                 steerT=0.2,
+                 quantLevels=8,
+                 reset_fn=resetEnv,
+                 maxSteps=1000,
+                 device=torch.device('cpu')) -> None:
         self.vehicle = vehicle
         self.park = park
         self.dt = dt
@@ -62,6 +114,11 @@ class Environment(gym.Env):
         self.steerVel = steerVel
         self.speedAcc = speedAcc
         self.steerT = steerT
+        self.reset_fn = reset_fn
+        self.maxSteps = maxSteps
+        self.n_steps = 0
+        self.device = device
+        self.no_collision = True
 
         self.quantLevels = quantLevels  # number of quantization levels, better be even number
         speedCandidates = torch.linspace(self.vehicle.minVel, self.vehicle.maxVel, quantLevels)
@@ -128,18 +185,21 @@ class Environment(gym.Env):
 
     @property
     def reward(self):
+        radar_readings = self.vehicle.GetAllRadarDistance(self.park.segAll)
         pos_err: torch.Tensor = self.TARGET_POS - self.vehicle.vehState[0:2, :]
         ang_err = self.TARGET_ANG - self.vehicle.vehState[2:3, :]
         steerAng = self.vehicle.vehState[3:4]
         vehVel = self.vehicle.vehState[4:5]
         is_parked = 1 if self.IsParked else 0
         is_collision = 1 if self.IsCollision else 0
-        rwd = 2 * torch.exp(-(0.05 * torch.sum(pos_err ** 2))) \
-              + 0.5 * torch.exp(-400 * ang_err ** 2) \
-              - 0.05 * steerAng ** 2 \
-              - 0.05 * vehVel ** 2 \
-              - is_parked * 100 \
-              + is_collision * -50
+        rwd = 0 \
+              + 2 * torch.exp(-(0.05 * torch.sum(pos_err ** 2))) \
+              + 0.5 * torch.exp(-40 * ang_err ** 2) \
+              + 0.05 * steerAng ** 2 \
+              + 0.05 * vehVel ** 2 \
+              + 100 * is_parked \
+              + -50 * is_collision \
+              + 0.1 * torch.log10(radar_readings.sum())
         return rwd
 
     @property
@@ -159,16 +219,15 @@ class Environment(gym.Env):
 
     @property
     def is_done(self):
-        return self.IsCollision or self.IsParked or self.IsOutOfBoundary,
+        return (self.n_steps > self.maxSteps) or self.IsParked or self.IsOutOfBoundary
 
     @property
     def observation(self):
-        target_state = self.TARGET_POS
         vehicle_state = self.vehicle.vehState
-        pos_err = self.TARGET_POS - self.vehicle.vehState[0:2, :]
-        ang_err = self.TARGET_ANG - self.vehicle.vehState[2:3, :]
+        pos_err: torch.Tensor = self.TARGET_POS - self.vehicle.vehState[0:2, :]
+        ang = torch.tensor([[math.sin(self.vehicle.vehState[2:3, :])], [math.cos(self.vehicle.vehState[2:3, :])]])
         radar_readings = self.vehicle.GetAllRadarDistance(self.park.segAll)
-        obs = torch.cat([target_state, vehicle_state, pos_err, ang_err, radar_readings])
+        obs = torch.cat([vehicle_state, pos_err, ang, radar_readings]).T
         return obs
 
     def render(self, fig, ax, mode='eval', *args, **kwargs):
@@ -181,7 +240,7 @@ class Environment(gym.Env):
         cv2.imshow('demo_control', cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            return
+            return im
 
     def step(self, action: torch.Tensor):
         """
@@ -190,43 +249,56 @@ class Environment(gym.Env):
         # Decompose action
         # [00 - 16] ==> steerAngIn
         # [16 - 32] ==> speedIn
+        self.n_steps += 1
         indices = action.reshape(2, -1).max(dim=1)[1]
         steerAngIn, speedIn = self.actionCandidates[0, indices[0]], self.actionCandidates[1, indices[1]]
-        self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
         info = {'steerAngIn': steerAngIn, 'speedIn': speedIn}
-
-        # Observation
-        target_state = self.TARGET_POS
-        vehicle_state = self.vehicle.vehState
-        pos_err = self.TARGET_POS - self.vehicle.vehState[0:2, :]
-        ang_err = self.TARGET_ANG - self.vehicle.vehState[2:3, :]
-        radar_readings = self.vehicle.GetAllRadarDistance(self.park.segAll)
-        obs = torch.cat([target_state, vehicle_state, pos_err, ang_err, radar_readings])
 
         # IsDone
         is_collision = self.IsCollision
+        # if is_collision:
+        #     if self.no_collision:
+        #         self.vehicle.vehState[4] *= -1
+        #         self.no_collision = False
+        #     self.vehicle.VehEvolution(self.dt, self.vehL)
+        # else:
+        #     self.no_collision = True
+        #     self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
+        self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
+
         is_parked = self.IsParked
-        is_out_of_boundary = self.IsOutOfBoundary,
-        is_done = is_collision or is_parked or is_out_of_boundary
+        is_out_of_boundary = self.IsOutOfBoundary
+        is_done = (self.n_steps >= self.maxSteps) or is_parked or is_out_of_boundary
+
+        # Observation
+        # target_pos = self.TARGET_POS
+        vehicle_state = self.vehicle.vehState
+        pos_err: torch.Tensor = self.TARGET_POS - self.vehicle.vehState[0:2, :]
+        ang = torch.tensor([[math.sin(self.vehicle.vehState[2:3, :])], [math.cos(self.vehicle.vehState[2:3, :])]])
+        radar_readings = self.vehicle.GetAllRadarDistance(self.park.segAll)
+        obs = torch.cat([vehicle_state, pos_err, ang, radar_readings]).T
 
         # Reward
+        ang_err = self.TARGET_ANG - self.vehicle.vehState[2:3, :]
         steerAng = self.vehicle.vehState[3:4]
         vehVel = self.vehicle.vehState[4:5]
         rwd = 2 * torch.exp(-(0.05 * torch.sum(pos_err ** 2))) \
               + 0.5 * torch.exp(-400 * ang_err ** 2) \
-              - 0.05 * steerAng ** 2 \
-              - 0.05 * vehVel ** 2 \
-              - is_parked * 100 \
-              + is_collision * -50
+              + 0.05 * steerAng ** 2 \
+              + 0.05 * vehVel ** 2 \
+              + is_parked * 100 \
+              - is_collision * 50 \
+              + 0.1 * torch.log10(radar_readings.sum())
 
         # return self.observation, self.reward, self.is_done, info
-        return obs, rwd, is_done, info
-
+        return obs.to(self.device), rwd.to(self.device), bool(is_done), info
 
     def reset(self):
-        init_x, init_y, init_theta = resetEnv()
+        self.no_collision = True
+        self.n_steps = 0
+        init_x, init_y, init_theta, init_steer_ang, init_speed = self.reset_fn()
         self.vehicle.vehState = torch.tensor([[float(init_x)], [float(init_y)], [float(init_theta)], [0], [0]], dtype=torch.float32)
-        return self.observation
+        return self.observation.to(self.device)
 
     def seed(self, seed=None):
         seed = 0 if seed is None else seed
@@ -244,7 +316,7 @@ class Environment(gym.Env):
 
     @property
     def observation_space(self):
-        return 32
+        return 5 + 2 + 2  + self.vehicle.radarNum
 
     @property
     def action_space(self):

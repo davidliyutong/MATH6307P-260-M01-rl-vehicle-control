@@ -13,10 +13,21 @@ class Vehicle:
     rear_y = torch.tensor([0.75, 0.75, 1, 1, 0.75, 0.75, -0.75, -0.75, -1, -1, -0.75, -0.75]).reshape(-1, 1)  # TODO This shape is releated with <TAG=0>
     minSteerAng = -math.pi / 4
     maxSteerAng = math.pi / 4
-    minVel = -1
-    maxVel = 1
+    minVel = -2
+    maxVel = 2
 
-    def __init__(self, init_x, init_y, init_theta, steerAng, speed, numRadar=24, radarRange=4) -> None:
+    def __init__(self,
+                 init_x,
+                 init_y,
+                 init_theta,
+                 steerAng,
+                 speed,
+                 numRadar=24,
+                 radarRange=8,
+                 minVel=-2,
+                 maxVel=2,
+                 minSteerAng=-math.pi / 4,
+                 maxSteerAng=math.pi / 4) -> None:
         self.vehState = torch.tensor([[float(init_x)], [float(init_y)], [float(init_theta)], [float(steerAng)], [float(speed)]], dtype=torch.float32)
 
         # Runtime constants
@@ -43,7 +54,6 @@ class Vehicle:
         self.V_front = torch.cat([self.v_front_x - self.V_b1['V_front'], self.v_front_y], dim=1).T  # TODO This shape is releated with <TAG=0>
         self.V_rear = torch.cat([self.v_rear_x, self.v_rear_y], dim=1).T  # TODO This shape is releated with <TAG=0>
 
-
         self.radar_x = self.vehCornersOriginal[0, 0] / 2
         self.radar_y = 0
         radar_translation = torch.tensor([[[self.radar_x], [self.radar_y]]]).repeat(numRadar, 1, 1)
@@ -53,6 +63,10 @@ class Vehicle:
         radar_endpoints = torch.stack([torch.cos(angle_candidates), torch.sin(angle_candidates)]).T.unsqueeze(-1) * radarRange
         self.radarSegsOriginal = torch.stack([torch.zeros_like(radar_endpoints), radar_endpoints], dim=2).squeeze(-1) + radar_translation
 
+        self.minVel = minVel
+        self.maxVel = maxVel
+        self.minSteerAng = minSteerAng
+        self.maxSteerAng = maxSteerAng
 
     def Draw(self, ax):
         """Draw the simulator
@@ -120,6 +134,15 @@ class Vehicle:
             vehState[4] -= speedAcc * dt
         else:
             vehState[4] = speedIn
+
+        vehState[0] = vehState[0] + vehState[4] * dt * torch.cos(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)
+        vehState[1] = vehState[1] + vehState[4] * dt * torch.sin(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)
+        vehState[2] = vehState[2] + vehState[4] * dt * torch.tan(vehState[3]) / vehL
+
+        self.vehState = vehState
+
+    def VehEvolution(self, dt, vehL):
+        vehState = self.vehState
 
         vehState[0] = vehState[0] + vehState[4] * dt * torch.cos(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)
         vehState[1] = vehState[1] + vehState[4] * dt * torch.sin(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)

@@ -1,6 +1,7 @@
 .vscode
 .idea
 log
+gamelog
 data
 
 *.pyc

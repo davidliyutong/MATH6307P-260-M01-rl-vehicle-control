@@ -6,7 +6,7 @@ import cv2
 
 
 if __name__ == '__main__':
-    LOG_OUTPUT = True
+    LOG_OUTPUT = False
     screen = pygame.display.set_mode((400, 475), 0, 32)
     screen.fill([0, 0, 0])
 
@@ -16,7 +16,7 @@ if __name__ == '__main__':
     steerT = 0.2
     dt = 0.02
 
-    environment = Environment(Vehicle(0, 0, 0, 0, 0), Park(), reset_fn=resetEnvParked)
+    environment = Environment(Vehicle(0, 0, 0, 0, 0, minVel=-1, maxVel=1, maxSteerAng=1.5, minSteerAng=-1.5), Park(), reset_fn=resetEnvParked)
     fig, ax = environment.InitFrame()
 
     no_collision = True
@@ -54,7 +54,7 @@ if __name__ == '__main__':
                 environment.vehicle.VehDynamics(steerAngIn, speedIn, dt, vehL, steerVel, speedAcc, steerT)
             environment.Visualization(ax)
             frame = getFrame(fig)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = cv2.transpose(frame)
             frame = pygame.surfarray.make_surface(frame)
             screen.blit(frame, (0, 0))
@@ -80,16 +80,16 @@ if __name__ == '__main__':
                     f.close()
                 exit()
             if keys_pressed[pygame.K_w]:
-                speedIn = min(1, speedIn + 0.01)
+                speedIn = min(environment.vehicle.maxVel, speedIn + 0.02)
                 print("<W>")
             if keys_pressed[pygame.K_a]:
-                steerAngIn = min(environment.vehicle.maxSteerAng, steerAngIn + 0.01)
+                steerAngIn = min(environment.vehicle.maxSteerAng, steerAngIn + 0.02)
                 print("<A>")
             if keys_pressed[pygame.K_s]:
-                speedIn = max(-1, speedIn - 0.01)
+                speedIn = max(environment.vehicle.minVel, speedIn - 0.02)
                 print("<S>")
             if keys_pressed[pygame.K_d]:
-                steerAngIn = max(environment.vehicle.minSteerAng, steerAngIn - 0.01)
+                steerAngIn = max(environment.vehicle.minSteerAng, steerAngIn - 0.02)
                 print("<D>")
             if keys_pressed[pygame.K_SPACE]:
                 print("<SPACE>")
@@ -116,4 +116,5 @@ if __name__ == '__main__':
             if restart:
                 restart = False
                 break
-        f.close()
+        if f is not None:
+            f.close()

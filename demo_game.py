@@ -172,11 +172,7 @@ if __name__ == '__main__':
                     assert all(map(lambda x: isinstance(x, float) or isinstance(x, int), newState))
                     for i in range(5):
                         environment.vehicle.vehState[i] = newState[i]
-                except AssertionError as err:
-                    print("Wrong input!!!", newStateStr)
-                    print(err)
-                    resetVehState = True
-                except SyntaxError as err:
+                except Exception as err:
                     print("Wrong input!!!", newStateStr)
                     print(err)
                     resetVehState = True

@@ -86,7 +86,7 @@ if __name__ == '__main__':
         while True:
             n_frame += 1
             if log_tensor_buffer is not None:
-                log_tensor_buffer.append({'state': environment.vehicle.vehState.T.numpy().tolist()[0], 'steerAngIn': steerAngIn, 'speedIn': speedIn, 'n_frame': n_frame})
+                log_tensor_buffer.append({'state': environment.vehicle.vehState.T.numpy().tolist()[0], 'steerAngIn': float(steerAngIn), 'speedIn': float(speedIn), 'n_frame': n_frame})
 
             if environment.IsCollision:
                 print('Collision !!! ')

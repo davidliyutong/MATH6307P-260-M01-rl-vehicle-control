@@ -35,5 +35,5 @@ if __name__ == '__main__':
 
         else:
             no_collision = True
-        environment.vehicle.VehDynamics(steerAngIn, speedIn, dt, vehL, steerVel, speedAcc, steerT)
+        environment.vehicle.VehDynamics(steerAngIn, speedIn, dt, vehL)
         environment.render(fig, ax)

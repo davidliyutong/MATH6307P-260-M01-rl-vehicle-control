@@ -49,6 +49,7 @@ def resetEnv() -> tuple:
             else:
                 return init_x, init_y, init_theta, 0, 0
 
+
 def resetEnvVel() -> tuple:
     """
     Return: init_x, init_y, inti_theta, init_steer_ang, init_speed
@@ -80,6 +81,7 @@ def resetEnvEval() -> tuple:
 
     return init_x, init_y, init_theta, 0, 0
 
+
 def resetEnvParked() -> tuple:
     """
     Return: init_x, init_y, inti_theta, init_steer_ang, init_speed
@@ -89,6 +91,7 @@ def resetEnvParked() -> tuple:
     init_theta = 0
 
     return init_x, init_y, init_theta, 0, 0
+
 
 class Environment(gym.Env):
     TARGET_POS = torch.tensor([[-3.9], [0]])
@@ -100,29 +103,25 @@ class Environment(gym.Env):
                  park: Park,
                  dt=0.02,
                  vehL=4,
-                 steerVel=math.pi / 2,
-                 speedAcc=10,
-                 steerT=0.2,
-                 quantLevels=8,
+                 quantLevels=4,
                  reset_fn=resetEnv,
                  maxSteps=1000,
+                 simStep=1,
                  device=torch.device('cpu')) -> None:
         self.vehicle = vehicle
         self.park = park
         self.dt = dt
         self.vehL = vehL
-        self.steerVel = steerVel
-        self.speedAcc = speedAcc
-        self.steerT = steerT
         self.reset_fn = reset_fn
         self.maxSteps = maxSteps
+        self.simStep = simStep  # Execute action for simStep * dt
         self.n_steps = 0
         self.device = device
         self.no_collision = True
 
         self.quantLevels = quantLevels  # number of quantization levels, better be even number
-        speedCandidates = torch.linspace(self.vehicle.minVel, self.vehicle.maxVel, quantLevels)
-        steerAngCandidates = torch.linspace(self.vehicle.minSteerAng, self.vehicle.maxSteerAng, quantLevels)
+        speedCandidates = torch.linspace(self.vehicle.minVel, self.vehicle.maxVel, 2 * quantLevels + 1)
+        steerAngCandidates = torch.linspace(self.vehicle.minSteerAng, self.vehicle.maxSteerAng, 2 * quantLevels + 1)
         self.actionCandidates = torch.stack([speedCandidates, steerAngCandidates])
 
     @classmethod
@@ -256,19 +255,25 @@ class Environment(gym.Env):
 
         # IsDone
         is_collision = self.IsCollision
-        # if is_collision:
-        #     if self.no_collision:
-        #         self.vehicle.vehState[4] *= -1
-        #         self.no_collision = False
-        #     self.vehicle.VehEvolution(self.dt, self.vehL)
-        # else:
-        #     self.no_collision = True
-        #     self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
-        self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL, self.steerVel, self.speedAcc, self.steerT)
+        # >>> With collission detection
+        for _ in range(self.simStep):
+            if is_collision:
+                if self.no_collision:
+                    self.vehicle.vehState[4] *= -1
+                    self.no_collision = False
+                self.vehicle.VehEvolution(self.dt, self.vehL)
+            else:
+                self.no_collision = True
+                self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL)
+        # <<<
+
+        # >>> No collision detection
+        # self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL)
+        # <<<
 
         is_parked = self.IsParked
         is_out_of_boundary = self.IsOutOfBoundary
-        is_done = (self.n_steps >= self.maxSteps) or is_parked or is_out_of_boundary
+        is_done = (self.n_steps >= self.maxSteps) or is_parked or is_out_of_boundary or is_collision
 
         # Observation
         # target_pos = self.TARGET_POS
@@ -316,8 +321,8 @@ class Environment(gym.Env):
 
     @property
     def observation_space(self):
-        return 5 + 2 + 2  + self.vehicle.radarNum
+        return 5 + 2 + 2 + self.vehicle.radarNum
 
     @property
     def action_space(self):
-        return 2 * self.quantLevels
+        return 4 * self.quantLevels + 2

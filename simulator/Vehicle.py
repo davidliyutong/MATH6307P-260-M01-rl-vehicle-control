@@ -22,6 +22,9 @@ class Vehicle:
                  init_theta,
                  steerAng,
                  speed,
+                 steerVel=math.pi / 2,
+                 speedAcc=10,
+                 steerT=0.2,
                  numRadar=24,
                  radarRange=8,
                  minVel=-2,
@@ -29,7 +32,9 @@ class Vehicle:
                  minSteerAng=-math.pi / 4,
                  maxSteerAng=math.pi / 4) -> None:
         self.vehState = torch.tensor([[float(init_x)], [float(init_y)], [float(init_theta)], [float(steerAng)], [float(speed)]], dtype=torch.float32)
-
+        self.steerVel = steerVel
+        self.speedAcc = speedAcc
+        self.steerT = steerT
         # Runtime constants
         self.vehOrg: float = float(min(self.body_x))
         self.vehCornersOriginal: torch.Tensor = torch.tensor([[max(self.body_x) - self.vehOrg, max(self.body_x) - self.vehOrg, 0, 0],
@@ -114,24 +119,24 @@ class Vehicle:
         for patch in vehicle_patches:
             ax.add_patch(patch)
 
-    def VehDynamics(self, steerAngIn, speedIn, dt, vehL, steerVel, speedAcc, steerT):
-        expT = math.exp(-dt / steerT)  # TODO: Store this constant
+    def VehDynamics(self, steerAngIn, speedIn, dt, vehL):
+        expT = math.exp(-dt / self.steerT)
         steerAngIdeal = torch.clip((1 - expT) * steerAngIn + expT * self.vehState[3], self.minSteerAng, self.maxSteerAng)
         vehState = self.vehState
 
         # vehicle steering angle evolution
-        if (steerAngIdeal - vehState[3]) > steerVel * dt:
-            vehState[3] += steerVel * dt
-        elif (steerAngIdeal - vehState[3]) < -steerVel * dt:
-            vehState[3] -= steerVel * dt
+        if (steerAngIdeal - vehState[3]) > self.steerVel * dt:
+            vehState[3] += self.steerVel * dt
+        elif (steerAngIdeal - vehState[3]) < -self.steerVel * dt:
+            vehState[3] -= self.steerVel * dt
         else:
             vehState[3] = steerAngIdeal
 
         # vehicle velocity evolution
-        if (speedIn - vehState[4]) > speedAcc * dt:
-            vehState[4] += speedAcc * dt
-        elif (speedIn - vehState[4]) < -speedAcc * dt:
-            vehState[4] -= speedAcc * dt
+        if (speedIn - vehState[4]) > self.speedAcc * dt:
+            vehState[4] += self.speedAcc * dt
+        elif (speedIn - vehState[4]) < -self.speedAcc * dt:
+            vehState[4] -= self.speedAcc * dt
         else:
             vehState[4] = speedIn
 

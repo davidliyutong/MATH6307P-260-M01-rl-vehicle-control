@@ -1,5 +1,4 @@
-from simulator import Vehicle, Environment, Park, initFrame
-from simulator import resetEnv
+from simulator import Vehicle, Environment, Park, initFrame, resetEnv
 import matplotlib.pyplot as plt
 import tqdm
 

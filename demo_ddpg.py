@@ -3,17 +3,17 @@ import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from algorithm import DDPG
 from algorithm.utils import agg_double_list
-from simulator import Environment, Vehicle, Park, resetEnvEval, resetEnvVel
+from simulator import Environment, Vehicle, Park, resetEnvEval, resetEnvVel, resetEnv
 from network import ActorNetwork, CriticNetwork
 import pickle
 
 MAX_EPISODES = 10000
 EPISODES_BEFORE_TRAIN = 256
 EVAL_EPISODES = 10
-EVAL_INTERVAL = 100
+EVAL_INTERVAL = 2560
 
 # max steps in each episode, prevent from running too long
-MAX_STEPS = 3000  # None
+MAX_STEPS = 10000  # None
 
 MEMORY_CAPACITY = 1000000
 BATCH_SIZE = 128
@@ -27,7 +27,7 @@ REWARD_DISCOUNTED_GAMMA = 0.99
 
 EPSILON_START = 0.99
 EPSILON_END = 0.05
-EPSILON_DECAY = 500
+EPSILON_DECAY = 5000
 
 DONE_PENALTY = None
 
@@ -40,13 +40,22 @@ SAVE_INTERVAL = 1000
 
 LOAD_STATE_DICT = False
 
+SIM_STEP = 20
 
 def run():
-    env = Environment(Vehicle(0, 0, 0, 0, 0), Park(), reset_fn=resetEnvVel, maxSteps=MAX_STEPS, device=DEVICE)
+    env = Environment(Vehicle(0, 0, 0, 0, 0), Park(),
+                      simStep=SIM_STEP,
+                      reset_fn=resetEnvEval,
+                      maxSteps=MAX_STEPS,
+                      device=DEVICE)
     env.seed(RANDOM_SEED)
     env.reset()
 
-    env_eval = Environment(Vehicle(0, 0, 0, 0, 0), Park(), reset_fn=resetEnvEval, maxSteps=MAX_STEPS, device=DEVICE)
+    env_eval = Environment(Vehicle(0, 0, 0, 0, 0), Park(),
+                           simStep=SIM_STEP,
+                           reset_fn=resetEnvEval,
+                           maxSteps=MAX_STEPS,
+                           device=DEVICE)
     env_eval.seed(RANDOM_SEED)
     env_eval.reset()
 
@@ -78,7 +87,8 @@ def run():
     with tqdm.tqdm(range(MAX_EPISODES)) as pbar:
         while ddpg.n_episodes < MAX_EPISODES:
             ddpg.interact()
-            # env.render(fig, ax, mode='train')
+            if ddpg.n_steps % 100:
+                env.render(fig, ax, mode='train')
             if ddpg.n_episodes >= EPISODES_BEFORE_TRAIN:
                 ddpg.train()
             if ddpg.episode_done and ((ddpg.n_episodes + 1) % EVAL_INTERVAL == 0):

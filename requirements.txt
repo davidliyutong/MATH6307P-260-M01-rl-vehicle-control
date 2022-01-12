@@ -1,0 +1,8 @@
+numpy
+torch
+tqdm
+torchvision
+pygame
+opencv-python
+matplotlib
+gym

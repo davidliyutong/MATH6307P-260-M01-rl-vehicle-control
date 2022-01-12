@@ -3,14 +3,14 @@ import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from algorithm import DDPG
 from algorithm.utils import agg_double_list
-from simulator import Environment, Vehicle, Park, resetEnvEval, resetEnvVel, resetEnv
+from simulator import Environment, Vehicle, Park, resetEnvEval, resetEnvVel, resetEnv, resetEnvEvalWithSpeed
 from network import ActorNetwork, CriticNetwork
 import pickle
 
 MAX_EPISODES = 10000
-EPISODES_BEFORE_TRAIN = 256
+EPISODES_BEFORE_TRAIN = 64
 EVAL_EPISODES = 10
-EVAL_INTERVAL = 2560
+EVAL_INTERVAL = 256
 
 # max steps in each episode, prevent from running too long
 MAX_STEPS = 10000  # None
@@ -42,10 +42,13 @@ LOAD_STATE_DICT = False
 
 SIM_STEP = 20
 
+DISPLAY = True
+
+
 def run():
-    env = Environment(Vehicle(0, 0, 0, 0, 0), Park(),
+    env = Environment(Vehicle(0, 0, 0, 0, 0, numRadar=24), Park(),
                       simStep=SIM_STEP,
-                      reset_fn=resetEnvEval,
+                      reset_fn=resetEnv,
                       maxSteps=MAX_STEPS,
                       device=DEVICE)
     env.seed(RANDOM_SEED)
@@ -87,7 +90,7 @@ def run():
     with tqdm.tqdm(range(MAX_EPISODES)) as pbar:
         while ddpg.n_episodes < MAX_EPISODES:
             ddpg.interact()
-            if ddpg.n_steps % 100:
+            if ddpg.n_steps % 100 and DISPLAY:
                 env.render(fig, ax, mode='train')
             if ddpg.n_episodes >= EPISODES_BEFORE_TRAIN:
                 ddpg.train()
@@ -104,10 +107,10 @@ def run():
                 writer.add_scalar('reward', ddpg.env.reward, ddpg.n_episodes + 1)
                 pbar.update()
 
-            if ((ddpg.n_episodes + 1) % SAVE_INTERVAL == 0):
+            if ((ddpg.n_episodes + 1) % SAVE_INTERVAL == 0 or ddpg.n_episodes == 0):
                 torch.save(actor_network.state_dict(), f"./checkpoint/actor_network_{ddpg.n_episodes}.pth")
                 torch.save(critic_network.state_dict(), f"./checkpoint/critic_network_{ddpg.n_episodes}.pth")
-                with open(f"./checkpoint/ddpg_{ddpg.n_episodes}.pth") as f:
+                with open(f"./checkpoint/ddpg_{ddpg.n_episodes}.pth", 'wb') as f:
                     pickle.dump(ddpg, f)
 
 

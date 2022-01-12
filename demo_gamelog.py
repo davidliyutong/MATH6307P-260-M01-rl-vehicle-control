@@ -1,11 +1,11 @@
 from simulator import Vehicle, Environment, Park, resetEnvEval
-import matplotlib.pyplot as plt
+import sys
 import math
 import json
 import tqdm
 
 if __name__ == '__main__':
-    LOG_FILENAME = './gamelog/1641460975.274294.json'
+    LOG_FILENAME = sys.argv[1]
     with open(LOG_FILENAME) as f:
         gamelog = json.load(f)
     assert isinstance(gamelog, list)
@@ -36,12 +36,12 @@ if __name__ == '__main__':
                 if no_collision:
                     environment.vehicle.vehState[4] *= -1
                     no_collision = False
-                environment.vehicle.VehEvolution(dt, vehL)
+                environment.vehicle.VehEvolution(dt)
             else:
                 no_collision = True
-                environment.vehicle.VehDynamics(steerAngIn, speedIn, dt, vehL)
+                environment.vehicle.VehDynamics(steerAngIn, speedIn, dt)
 
-            if pbar.n % 200 == 0:
+            if pbar.n % 10 == 0:
                 environment.render(fig, ax)
             pbar.set_description(f"steerAngIn={steerAngIn}, speedIn=e{speedIn}")
             pbar.update()

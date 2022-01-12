@@ -93,11 +93,11 @@ if __name__ == '__main__':
                 if no_collision:
                     environment.vehicle.vehState[4] *= -1
                     no_collision = False
-                environment.vehicle.VehEvolution(dt, vehL)
+                environment.vehicle.VehEvolution(dt)
                 speedIn = environment.vehicle.vehState[4]
             else:
                 no_collision = True
-                environment.vehicle.VehDynamics(steerAngIn, speedIn, dt, vehL)
+                environment.vehicle.VehDynamics(steerAngIn, speedIn, dt)
             environment.Visualization(ax)
             frame = getFrame(fig)
             # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

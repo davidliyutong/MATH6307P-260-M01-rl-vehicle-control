@@ -1,5 +1,5 @@
-import time
-
+import sys
+sys.path.append("..")
 from simulator import Vehicle, Park, Environment, initFrame
 import numpy as np
 import math
@@ -14,7 +14,7 @@ if __name__ == '__main__':
     init_y = 1.5
     init_theta = math.pi / 2
 
-    environment = Environment(Vehicle(init_x, init_y, init_theta, 0, 0), Park())
+    environment = Environment(Vehicle(init_x, init_y, init_theta, 0, 0), Park(), reset_fn=None)
 
     dt = 0.02
     t_max = 10
@@ -35,5 +35,5 @@ if __name__ == '__main__':
 
         else:
             no_collision = True
-        environment.vehicle.VehDynamics(steerAngIn, speedIn, dt, vehL)
+        environment.vehicle.VehDynamics(steerAngIn, speedIn, dt)
         environment.render(fig, ax)

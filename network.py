@@ -17,7 +17,7 @@ class ActorNetwork(nn.Module):
         self.fc4 = nn.Linear(128, 128)
         self.fc5 = nn.Linear(128, 64)
         self.fc6 = nn.Linear(64, output_size)
-        self.output = nn.Softmax(dim=2)
+        self.output = nn.Softmax(dim=1)
 
     def __call__(self, state):
         batch_sz = state.shape[0]
@@ -29,7 +29,7 @@ class ActorNetwork(nn.Module):
         out = nn.functional.relu(self.fc4(out))
         out = nn.functional.relu(self.fc5(out))
         out = nn.functional.relu(self.fc6(out))
-        out = self.output(out.view(batch_sz, 2, -1)).view(batch_sz, -1)
+        out = self.output(out)
 
         return out
 

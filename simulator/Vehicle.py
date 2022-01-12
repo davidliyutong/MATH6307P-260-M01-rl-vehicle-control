@@ -25,6 +25,7 @@ class Vehicle:
                  steerVel=math.pi / 2,
                  speedAcc=10,
                  steerT=0.2,
+                 vehL=4,
                  numRadar=24,
                  radarRange=8,
                  minVel=-2,
@@ -35,6 +36,7 @@ class Vehicle:
         self.steerVel = steerVel
         self.speedAcc = speedAcc
         self.steerT = steerT
+        self.vehL = vehL
         # Runtime constants
         self.vehOrg: float = float(min(self.body_x))
         self.vehCornersOriginal: torch.Tensor = torch.tensor([[max(self.body_x) - self.vehOrg, max(self.body_x) - self.vehOrg, 0, 0],
@@ -119,10 +121,11 @@ class Vehicle:
         for patch in vehicle_patches:
             ax.add_patch(patch)
 
-    def VehDynamics(self, steerAngIn, speedIn, dt, vehL):
-        expT = math.exp(-dt / self.steerT)
-        steerAngIdeal = torch.clip((1 - expT) * steerAngIn + expT * self.vehState[3], self.minSteerAng, self.maxSteerAng)
+    def VehDynamics(self, steerAngIn, speedIn, dt):
         vehState = self.vehState
+
+        expT = math.exp(-dt / self.steerT)
+        steerAngIdeal = torch.clip((1 - expT) * steerAngIn + expT * vehState[3], self.minSteerAng, self.maxSteerAng)
 
         # vehicle steering angle evolution
         if (steerAngIdeal - vehState[3]) > self.steerVel * dt:
@@ -140,18 +143,18 @@ class Vehicle:
         else:
             vehState[4] = speedIn
 
-        vehState[0] = vehState[0] + vehState[4] * dt * torch.cos(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)
-        vehState[1] = vehState[1] + vehState[4] * dt * torch.sin(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)
-        vehState[2] = vehState[2] + vehState[4] * dt * torch.tan(vehState[3]) / vehL
+        vehState[0] = vehState[0] + vehState[4] * dt * torch.cos(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / self.vehL)
+        vehState[1] = vehState[1] + vehState[4] * dt * torch.sin(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / self.vehL)
+        vehState[2] = vehState[2] + vehState[4] * dt * torch.tan(vehState[3]) / self.vehL
 
         self.vehState = vehState
 
-    def VehEvolution(self, dt, vehL):
+    def VehEvolution(self, dt):
         vehState = self.vehState
 
-        vehState[0] = vehState[0] + vehState[4] * dt * torch.cos(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)
-        vehState[1] = vehState[1] + vehState[4] * dt * torch.sin(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / vehL)
-        vehState[2] = vehState[2] + vehState[4] * dt * torch.tan(vehState[3]) / vehL
+        vehState[0] = vehState[0] + vehState[4] * dt * torch.cos(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / self.vehL)
+        vehState[1] = vehState[1] + vehState[4] * dt * torch.sin(vehState[2] + 0.5 * vehState[4] * dt * torch.tan(vehState[3]) / self.vehL)
+        vehState[2] = vehState[2] + vehState[4] * dt * torch.tan(vehState[3]) / self.vehL
 
         self.vehState = vehState
 

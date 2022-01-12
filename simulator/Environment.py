@@ -8,7 +8,6 @@ import cv2
 import os
 import random
 
-from simulator import resetEnv
 from simulator.Park import Park
 from simulator.Vehicle import Vehicle
 
@@ -38,10 +37,10 @@ class Environment(gym.Env):
     def __init__(self,
                  vehicle: Vehicle,
                  park: Park,
+                 reset_fn,
                  dt=0.02,
                  vehL=4,
                  quantLevels=4,
-                 reset_fn=resetEnv,
                  maxSteps=1000,
                  simStep=1,
                  device=torch.device('cpu')) -> None:
@@ -54,7 +53,10 @@ class Environment(gym.Env):
         self.simStep = simStep  # Execute action for simStep * dt
         self.n_steps = 0
         self.device = device
+
         self.no_collision = True
+        self.steerAngIn = 0
+        self.speedIn = 0
 
         self.quantLevels = quantLevels  # number of quantization levels, better be even number
         speedCandidates = torch.linspace(self.vehicle.minVel, self.vehicle.maxVel, 2 * quantLevels + 1)
@@ -177,6 +179,7 @@ class Environment(gym.Env):
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             return im
+        return im
 
     def step(self, action: torch.Tensor):
         """
@@ -186,9 +189,20 @@ class Environment(gym.Env):
         # [00 - 16] ==> steerAngIn
         # [16 - 32] ==> speedIn
         self.n_steps += 1
-        indices = action.reshape(2, -1).max(dim=1)[1]
-        steerAngIn, speedIn = self.actionCandidates[0, indices[0]], self.actionCandidates[1, indices[1]]
-        info = {'steerAngIn': steerAngIn, 'speedIn': speedIn}
+        indices = action.max(dim=1)[1]
+
+        if indices == 0:
+            self.speedIn = min(self.vehicle.maxVel, self.speedIn + 0.02)
+        if indices == 1:
+            self.steerAngIn = min(self.vehicle.maxSteerAng, self.steerAngIn + 0.02)
+        if indices == 2:
+            self.speedIn = max(self.vehicle.minVel, self.speedIn - 0.02)
+        if indices == 3:
+            self.steerAngIn = max(self.vehicle.minSteerAng, self.steerAngIn - 0.02)
+        if indices == 4:
+            self.speedIn = 0
+
+        info = {'steerAngIn': self.steerAngIn, 'speedIn': self.speedIn}
 
         # IsDone
         is_collision = self.IsCollision
@@ -198,10 +212,10 @@ class Environment(gym.Env):
                 if self.no_collision:
                     self.vehicle.vehState[4] *= -1
                     self.no_collision = False
-                self.vehicle.VehEvolution(self.dt, self.vehL)
+                self.vehicle.VehEvolution(self.dt)
             else:
                 self.no_collision = True
-                self.vehicle.VehDynamics(steerAngIn, speedIn, self.dt, self.vehL)
+                self.vehicle.VehDynamics(self.steerAngIn, self.speedIn, self.dt)
         # <<<
 
         # >>> No collision detection
@@ -230,13 +244,16 @@ class Environment(gym.Env):
               + 0.05 * vehVel ** 2 \
               + is_parked * 100 \
               - is_collision * 50 \
-              + 0.1 * torch.log10(radar_readings.sum())
+              + 0.02 * torch.log10(radar_readings.sum())
 
         # return self.observation, self.reward, self.is_done, info
         return obs.to(self.device), rwd.to(self.device), bool(is_done), info
 
     def reset(self):
         self.no_collision = True
+        self.steerAngIn = 0
+        self.speedIn = 0
+
         self.n_steps = 0
         init_x, init_y, init_theta, init_steer_ang, init_speed = self.reset_fn()
         self.vehicle.vehState = torch.tensor([[float(init_x)], [float(init_y)], [float(init_theta)], [0], [0]], dtype=torch.float32)
@@ -262,4 +279,4 @@ class Environment(gym.Env):
 
     @property
     def action_space(self):
-        return 4 * self.quantLevels + 2
+        return 5

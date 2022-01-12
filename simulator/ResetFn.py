@@ -3,7 +3,9 @@ import math
 import numpy as np
 import torch
 
-from . import Environment, Vehicle, Park
+from .Environment import Environment
+from .Vehicle import Vehicle
+from .Park import Park
 
 
 def resetEnv() -> tuple:
@@ -14,7 +16,7 @@ def resetEnv() -> tuple:
     Y_CANDIDATES = np.linspace(-1, 4, 601)
     THETA_CANDIDATES = np.linspace(math.radians(-30), math.radians(120), 64)
 
-    environment = Environment(Vehicle(0, 0, 0, 0, 0), Park())
+    environment = Environment(Vehicle(0, 0, 0, 0, 0), Park(), reset_fn=None)
 
     while True:
         init_x = np.random.choice(X_CANDIDATES)
@@ -57,6 +59,16 @@ def resetEnvEval() -> tuple:
     init_theta = math.pi / 2
 
     return init_x, init_y, init_theta, 0, 0
+
+def resetEnvEvalWithSpeed() -> tuple:
+    """
+    Return: init_x, init_y, inti_theta, init_steer_ang, init_speed
+    """
+    init_x = 1.2
+    init_y = 1.5
+    init_theta = math.pi / 2
+
+    return init_x, init_y, init_theta, 0, -0.1
 
 
 def resetEnvParked() -> tuple:
